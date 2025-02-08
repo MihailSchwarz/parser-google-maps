@@ -5,3 +5,4 @@ __pycache__/
 *.pyd 
 titles.txt
 config.py
+browser_cache/
