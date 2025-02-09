@@ -1,16 +1,16 @@
+const express = require("express");
 const { chromium } = require("playwright");
 const path = require("path");
-const searchQuery = "Тенерифе";
 
-async function runGoogleMaps() {
-  // Добавляем время начала выполнения
+// Функция для выполнения поиска на Google Maps и сбора URL фотографий
+async function runGoogleMaps(searchQuery) {
   const startTime = new Date();
   console.log("Скрипт запущен:", startTime.toLocaleTimeString());
 
-  // Настраиваем путь к папке с кешем
+  // Путь для хранения кеша браузера
   const userDataDir = path.join(__dirname, "browser-cache");
 
-  // Список доменов, с которых не нужно загружать файлы
+  // Список доменов для блокировки ненужных ресурсов
   const blockedDomains = [
     "*.googlevideo.com",
     "*.doubleclick.net",
@@ -22,17 +22,17 @@ async function runGoogleMaps() {
     "maps.gstatic.com",
     "ssl.gstatic.com",
     "fonts.gstatic.com",
-    //"www.google.com/maps/vt/",
     "*.googleusercontent.com",
   ];
 
-  // Объявляем context в более широкой области видимости
   let context;
+  let photoUrls = new Set();
+  let elapsedTime = 0; // Переменная для хранения времени выполнения
 
   try {
-    // Запускаем браузер с постоянным контекстом для сохранения кеша
+    // Запускаем браузер в headless режиме
     context = await chromium.launchPersistentContext(userDataDir, {
-      headless: true,
+      headless: false,
       viewport: { width: 1200, height: 900 },
       userAgent:
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -42,14 +42,11 @@ async function runGoogleMaps() {
 
     const page = await context.newPage();
 
-    // Обработчик маршрутизации для блокировки нежелательных запросов
+    // Блокируем запросы к лишним ресурсам для ускорения работы
     await page.route("**/*", (route) => {
       const url = route.request().url();
-
-      // Список дополнительных типов ресурсов для блокировки
       const blockedResourceTypes = ["image", "media", "font"];
 
-      // Если URL содержит одно из значений из blockedDomains или является типом ресурса для блокировки
       const shouldBlock =
         blockedDomains.some((pattern) => {
           const check = pattern.startsWith("*.") ? pattern.slice(2) : pattern;
@@ -65,10 +62,10 @@ async function runGoogleMaps() {
       return route.continue();
     });
 
-    // Шаг 1. Открываем Google Maps
+    // Открываем Google Maps
     await page.goto("https://www.google.com/maps/?hl=ru");
 
-    // Добавляем стили для отключения анимаций и переходов на странице
+    // Отключаем анимации и переходы, чтобы ускорить отрисовку страницы
     await page.addStyleTag({
       content: `
         * {
@@ -78,7 +75,7 @@ async function runGoogleMaps() {
       `,
     });
 
-    // Проверяем наличие окна с куки и нажимаем кнопку "Принять все", если нужно
+    // Обработка окна с куки (если оно появляется)
     try {
       const cookieText = await page.textContent("body");
       if (cookieText.includes("Прежде чем перейти к Google")) {
@@ -91,10 +88,8 @@ async function runGoogleMaps() {
       console.log("Ошибка при обработке окна с куки:", error);
     }
 
-    // Ждем появления поля ввода карты
+    // Ожидаем появления поля поиска и выполняем поиск по запросу
     await page.waitForSelector("#searchboxinput", { timeout: 10000 });
-
-    // Шаг 2. Поиск Тенерифе
     try {
       const searchInput = await page.locator("#searchboxinput");
       await searchInput.click();
@@ -105,29 +100,54 @@ async function runGoogleMaps() {
       console.error("Ошибка при поиске:", error);
     }
 
-    // Шаг 3. Переход в раздел фотографий
+    // Переход к разделу фотографий
     try {
-      await page.waitForSelector('text="Посмотреть фото"', { timeout: 10000 });
-      await page.click('text="Посмотреть фото"');
-      console.log("Успешно перешли в раздел фотографий!");
+      // Ждем загрузки контента и пробуем найти кнопку с фотографиями разными способами
+      await page.waitForTimeout(2000); // Даем время для загрузки контента
+
+      const photoButtonSelectors = [
+        'div.fontBodyMedium:has-text("Посмотреть фото")',
+        'text="Посмотреть фото"',
+        'span.fontBodyMedium:has-text("Фото")',
+        'span:text("Фото")',
+      ];
+
+      let buttonFound = false;
+      for (const selector of photoButtonSelectors) {
+        try {
+          const element = await page.$(selector);
+          if (element) {
+            await element.click();
+            buttonFound = true;
+            console.log(
+              `Успешно перешли в раздел фотографий используя селектор: ${selector}`
+            );
+            break;
+          }
+        } catch (e) {
+          continue;
+        }
+      }
+
+      if (!buttonFound) {
+        throw new Error("Не удалось найти кнопку для перехода к фотографиям");
+      }
     } catch (error) {
       console.error("Ошибка при переходе к фотографиям:", error);
     }
 
-    // Шаг 4. Переключение фотографий и сбор URL
+    // Сбор URL фотографий
     try {
       await page.waitForSelector('button[aria-label="Далее"]', {
         timeout: 10000,
       });
-      const photoUrls = new Set();
 
-      // Функция для сбора URL изображений на странице с оптимизированным проходом по DOM
+      // Функция для сбора URL изображений на странице
       async function collectImageUrls() {
         const urls = await page.evaluate(() => {
           const images = document.querySelectorAll("img");
           return Array.from(images).reduce((acc, img) => {
             const src = img.src;
-            // Проверяем, что src существует и соответствует нужному паттерну
             if (src && src.includes("googleusercontent.com/p/")) {
               // Форматируем URL для получения изображения в высоком качестве
               acc.push(src.split("=")[0] + "=w2000");
@@ -135,24 +155,19 @@ async function runGoogleMaps() {
             return acc;
           }, []);
         });
-
         urls.forEach((url) => photoUrls.add(url));
       }
 
-      // Собираем URL с первой фотографии
+      // Собираем URL с текущей фотографии
       await collectImageUrls();
 
-      // Переключаем фотографии 5 раз, собираем URL после каждого переключения
-      for (let i = 0; i < 10; i++) {
+      // Переключаем фотографии несколько раз для сбора всех URL
+      for (let i = 0; i < 15; i++) {
         await page.click('button[aria-label="Далее"]');
         await collectImageUrls();
       }
 
-      console.log("\nВсего найдено уникальных фотографий:", photoUrls.size);
-      console.log("Список всех URL:");
-      [...photoUrls].forEach((url, index) => {
-        console.log(`${index + 1}. ${url}`);
-      });
+      console.log("Всего найдено уникальных фотографий:", photoUrls.size);
     } catch (error) {
       console.error("Ошибка при переключении фотографий:", error);
     }
@@ -163,17 +178,41 @@ async function runGoogleMaps() {
       await context.close();
     }
     const endTime = new Date();
-    const executionTime = (endTime - startTime) / 1000;
     console.log("Скрипт завершен:", endTime.toLocaleTimeString());
-    console.log(`Время выполнения: ${executionTime.toFixed(2)} секунд`);
-
-    // Завершаем работу скрипта
-    process.exit(0);
+    elapsedTime = endTime - startTime; // Вычисляем время выполнения (в миллисекундах)
   }
+
+  // Возвращаем объект с найденными URL и временем выполнения
+  return { urls: Array.from(photoUrls), executionTime: elapsedTime };
 }
 
-// Запускаем скрипт
-runGoogleMaps().catch((error) => {
-  console.error("Критическая ошибка:", error);
-  process.exit(1);
+// Создаем веб-сервер
+const app = express();
+
+// Маршрут /gm с параметром запроса q
+app.get("/gm", async (req, res) => {
+  try {
+    const searchQuery = req.query.q;
+    if (!searchQuery) {
+      return res.status(400).json({ error: "Параметр 'q' обязателен" });
+    }
+    console.log(`Получен запрос для поиска: ${searchQuery}`);
+
+    // Выполняем поиск на Google Maps
+    const result = await runGoogleMaps(searchQuery);
+    res.json({
+      query: searchQuery,
+      executionTime: result.executionTime / 1000,
+      urls: result.urls,
+    });
+  } catch (error) {
+    console.error("Ошибка при выполнении поиска:", error);
+    res.status(500).json({ error: "Внутренняя ошибка сервера" });
+  }
+});
+
+// Запускаем сервер на порту 3000 или используем порт, указанный в переменных окружения
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Сервер запущен на порту ${PORT}`);
 });
