@@ -5,6 +5,5 @@ __pycache__/
 *.pyd 
 titles.txt
 config.py
-browser_cache/
 node_modules/
-src/browser_cache/**
+/src/browser-cache
