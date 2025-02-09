@@ -1,0 +1,13 @@
+{
+  "name": "google-maps-scraper",
+  "version": "1.0.0",
+  "description": "Google Maps Photo Scraper",
+  "main": "main.js",
+  "scripts": {
+    "start": "node src/main.js"
+  },
+  "dependencies": {
+    "playwright": "^1.42.1",
+    "minimatch": "^9.0.3"
+  }
+}

@@ -40,7 +40,7 @@ def scrape_google_maps(search_query: str):
     with sync_playwright() as p:
         # Настройка браузера с включенным кешированием
         browser = p.chromium.launch(
-            headless=True,  # Включаем headless режим
+            headless=False,  # Включаем headless режим
             args=[
                 "--disable-web-security",
                 "--disable-features=IsolateOrigins,site-per-process",
@@ -76,7 +76,7 @@ def scrape_google_maps(search_query: str):
         page.set_default_navigation_timeout(10000)
         
         # Загружаем страницу с ожиданием загрузки сети
-        page.goto("https://www.google.com/maps", wait_until="networkidle")
+        page.goto("https://www.google.com/maps?hl=en", wait_until="networkidle")
         
         # Обработка окна с cookie
         try:
