@@ -8,6 +8,15 @@
 2. Установить зависимости
 3. Запустить скрипт
 
+```
+cd ~
+git clone https://github.com/MihailSchwarz/parser-google-maps.git
+cd parser-google-maps
+npm install
+npx playwright install
+npx playwright install-deps
+```
+
 ## Использование
 
 ```bash
