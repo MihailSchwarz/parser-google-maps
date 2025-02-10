@@ -113,7 +113,12 @@ async function runGoogleMaps(searchQuery) {
         .locator('div:has-text("Информация")')
         .count();
 
-      if (hasSearchResults && hasInfoText === 0) {
+      // Проверяем, что на странице нет div с классом fontLabelMedium и текстом "Сохранить"
+      const hasSaveText = await page
+        .locator('div.fontLabelMedium:has-text("Сохранить")')
+        .count();
+
+      if (hasSearchResults && hasInfoText === 0 && hasSaveText === 0) {
         console.log("Обнаружена страница результатов поиска");
 
         // Найти контейнер результатов по атрибуту aria-label или роли
