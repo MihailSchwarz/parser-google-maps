@@ -104,7 +104,9 @@ async function runGoogleMaps(searchQuery) {
     // Проверка на страницу результатов поиска и клик по первому результату
     try {
       await page.waitForLoadState("networkidle");
-      const hasSearchResults = await page.$('h1:has-text("Результаты")');
+      const hasSearchResults = await page.locator(
+        'div[aria-label^="Результаты по запросу"], [role="feed"]'
+      );
 
       if (hasSearchResults) {
         console.log("Обнаружена страница результатов поиска");
@@ -130,13 +132,15 @@ async function runGoogleMaps(searchQuery) {
 
     // Переход к разделу фотографий и поиск ссылок
     try {
-      await page.waitForLoadState("networkidle");
+      //await page.waitForLoadState("networkidle");
+      await page.waitForTimeout(2000); // Заменяем на ожидание 2 секунды
 
       const photoButtonSelectors = [
         'div.fontBodyMedium:has-text("Посмотреть фото")',
         'text="Посмотреть фото"',
         'span.fontBodyMedium:has-text("Фото")',
         'span:text("Фото")',
+        'div[jsaction*="heroHeaderImage"]',
       ];
 
       let buttonFound = false;
