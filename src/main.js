@@ -108,7 +108,12 @@ async function runGoogleMaps(searchQuery) {
         'div[aria-label^="Результаты по запросу"], [role="feed"]'
       );
 
-      if (hasSearchResults) {
+      // Проверяем, что в результатах нет текста "Информация"
+      const hasInfoText = await page
+        .locator('div:has-text("Информация")')
+        .count();
+
+      if (hasSearchResults && hasInfoText === 0) {
         console.log("Обнаружена страница результатов поиска");
 
         // Найти контейнер результатов по атрибуту aria-label или роли
