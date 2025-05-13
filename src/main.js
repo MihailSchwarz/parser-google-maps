@@ -32,7 +32,7 @@ async function runGoogleMaps(searchQuery) {
   try {
     // Запускаем браузер в headless режиме
     context = await chromium.launchPersistentContext(userDataDir, {
-      headless: true,
+      headless: false,
       viewport: { width: 1200, height: 900 },
       userAgent:
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -88,7 +88,7 @@ async function runGoogleMaps(searchQuery) {
       console.log("Ошибка при обработке окна с куки:", error);
     }
 
-    // Ожидаем появления поля поиска и выполняем поиск по запросу
+    // ШАГ 1: Ожидаем появления поля поиска и выполняем поиск по запросу
     await page.waitForSelector("#searchboxinput", { timeout: 3000 });
     try {
       const searchInput = await page.locator("#searchboxinput");
@@ -101,190 +101,27 @@ async function runGoogleMaps(searchQuery) {
       throw new Error("Не удалось выполнить поиск");
     }
 
-    // Проверка на страницу результатов поиска и клик по первому результату
+    // ШАГ 2: Клик по первому результату поиска по фиксированным координатам
     try {
       await page.waitForLoadState("networkidle");
       await page.waitForTimeout(2000);
 
-      // Проверяем, есть ли заголовок "Результаты"
-      const hasResultsHeader = await page.evaluate(() => {
-        const h1Elements = document.querySelectorAll("h1");
-        for (const h1 of h1Elements) {
-          if (h1.textContent.includes("Результаты")) {
-            return true;
-          }
-        }
-        return false;
-      });
+      console.log(
+        "Кликаем по первому результату с помощью фиксированных координат"
+      );
 
-      console.log(`Обнаружен заголовок "Результаты": ${hasResultsHeader}`);
-
-      // Если обнаружен заголовок "Результаты", кликаем по первому элементу списка
-      if (hasResultsHeader) {
-        console.log(
-          "Находимся на странице результатов, выбираем первый элемент списка"
-        );
-
-        // Попытка найти и кликнуть по первому результату в списке
-        try {
-          const firstResultSelectors = [
-            // Селекторы для первого результата
-            'div[role="feed"] > div:first-child',
-            'a[href^="https://www.google.com/maps/place/"]:first-child',
-            "div.Nv2PK:first-child",
-            "div.THOPZb:first-child",
-          ];
-
-          let resultClicked = false;
-
-          // Пробуем использовать селекторы
-          for (const selector of firstResultSelectors) {
-            try {
-              if (await page.isVisible(selector)) {
-                await page.click(selector);
-                console.log(
-                  `Успешно кликнули по первому результату с селектором: ${selector}`
-                );
-                resultClicked = true;
-                break;
-              }
-            } catch (e) {
-              console.log(
-                `Не удалось использовать селектор ${selector}: ${e.message}`
-              );
-            }
-          }
-
-          // Если селекторы не сработали, используем координаты
-          if (!resultClicked) {
-            console.log(
-              "Селекторы не сработали, используем клик по координатам для первого результата"
-            );
-
-            // Получаем размеры экрана
-            const dimensions = await page.evaluate(() => {
-              return {
-                width: window.innerWidth,
-                height: window.innerHeight,
-              };
-            });
-
-            // Координаты первого результата (обычно находится в верхней части списка)
-            // Примерно 1/5 ширины экрана и 1/4 высоты от верха
-            const x = Math.floor(dimensions.width * 0.2);
-            const y = Math.floor(dimensions.height * 0.25);
-
-            console.log(
-              `Клик по координатам первого результата: x=${x}, y=${y}`
-            );
-            await page.mouse.click(x, y);
-            resultClicked = true;
-          }
-
-          await page.waitForLoadState("networkidle");
-          await page.waitForTimeout(1000);
-        } catch (e) {
-          console.log(`Ошибка при обработке первого результата: ${e.message}`);
-        }
-      } else {
-        // Стандартные селекторы для результатов поиска (существующий код)
-        const resultSelectors = [
-          'a[href^="https://www.google.com/maps/place/"]',
-          'div[role="feed"] > div > div',
-          'a:has(div[aria-label*="звезд"])',
-          'div[role="main"] > div > div > div:first-child',
-          'a[jsaction*="click"]',
-        ];
-
-        let resultClicked = false;
-
-        // Пробуем клик через селекторы
-        for (const selector of resultSelectors) {
-          try {
-            const elements = await page.$$(selector);
-            if (elements && elements.length > 0) {
-              console.log(`Найден результат по селектору: ${selector}`);
-              await elements[0].click();
-              resultClicked = true;
-              console.log("Успешно перешли к деталям места");
-              await page.waitForLoadState("networkidle");
-              await page.waitForTimeout(1000);
-              break;
-            }
-          } catch (e) {
-            console.log(
-              `Не удалось использовать селектор ${selector}: ${e.message}`
-            );
-            continue;
-          }
-        }
-
-        // Если селекторы не сработали, пробуем клик по координатам
-        if (!resultClicked) {
-          console.log(
-            "Не удалось кликнуть по селекторам, пробуем клик по координатам..."
-          );
-          try {
-            // Ждем загрузки результатов
-            await page.waitForTimeout(1000);
-
-            // Получаем размеры страницы
-            const dimensions = await page.evaluate(() => {
-              return {
-                width: window.innerWidth,
-                height: window.innerHeight,
-              };
-            });
-
-            // Позиция для клика по первой карточке
-            // Примерные координаты: 25% ширины, 30% высоты от верха
-            const x = Math.floor(dimensions.width * 0.25);
-            const y = Math.floor(dimensions.height * 0.3);
-
-            console.log(`Клик по координатам: x=${x}, y=${y}`);
-
-            // Выполняем клик по координатам
-            await page.mouse.click(x, y);
-
-            // Даем время для загрузки
-            await page.waitForLoadState("networkidle");
-            await page.waitForTimeout(2000);
-
-            resultClicked = true;
-          } catch (e) {
-            console.log(`Ошибка при клике по координатам: ${e.message}`);
-          }
-        }
-
-        // Если и координаты не помогли - пробуем клик по фиксированным координатам для первого элемента
-        if (!resultClicked) {
-          console.log("Пробуем клик по фиксированным координатам...");
-          try {
-            // Фиксированные координаты первой карточки на основе скриншота
-            await page.mouse.click(250, 180);
-            await page.waitForLoadState("networkidle");
-            await page.waitForTimeout(2000);
-            resultClicked = true;
-          } catch (e) {
-            console.log(
-              `Ошибка при клике по фиксированным координатам: ${e.message}`
-            );
-          }
-        }
-
-        if (!resultClicked) {
-          throw new Error("Не удалось перейти к деталям места");
-        }
-      }
+      // Фиксированные координаты первой карточки
+      await page.mouse.click(250, 180);
+      console.log("Клик по координатам: x=250, y=180");
+      await page.waitForLoadState("networkidle");
+      await page.waitForTimeout(2000);
 
       // Проверяем, открылась ли карточка места в модальном окне
       const hasModalCard = await page.evaluate(() => {
-        // Проверка наличия заголовка места в модальном окне
-        const modalTitle = document.querySelector(".fontHeadlineLarge");
-        return (
-          modalTitle !== null &&
-          (document.querySelector(".m6QErb.tLjsW.eKbjU") !== null || // Типичный контейнер модального окна
-            document.querySelector(".m6QErb.DxyBCb.kA9KIf.dS8AEf") !== null) // Альтернативный контейнер
+        // Проверка наличия div с текстом "Сохранить" в модальном окне
+        const divElements = document.querySelectorAll("div");
+        return Array.from(divElements).some(
+          (div) => div.textContent && div.textContent.includes("Сохранить")
         );
       });
 
@@ -293,279 +130,110 @@ async function runGoogleMaps(searchQuery) {
           "Обнаружена карточка места в модальном окне, кликаем по фотографии"
         );
 
-        try {
-          // Пробуем сначала использовать селекторы для главной фотографии в модальном окне
-          const modalPhotoSelectors = [
-            'button[aria-label*="Фото"]',
-            'button[jsaction*="hero"]',
-            'img[src*="googleusercontent.com"]',
-            ".tEVN5b", // Основной контейнер фото в карточке
-            ".RZ66Rb", // Изображение в верхней части карточки
-          ];
+        // Используем фиксированные координаты вместо поиска h1
+        console.log("Используем серию кликов по фиксированным координатам");
 
-          let photoClicked = false;
+        // Первый клик - на верхнюю часть карточки, где обычно фото
+        await page.mouse.click(700, 150);
+        console.log("Клик по координатам: x=700, y=150");
+        await page.waitForTimeout(500);
 
-          // Пробуем использовать селекторы
-          for (const selector of modalPhotoSelectors) {
-            if (await page.isVisible(selector)) {
-              console.log(`Найдена фотография по селектору: ${selector}`);
-              await page.click(selector);
-              photoClicked = true;
-              break;
-            }
-          }
+        // Второй клик - немного ниже
+        await page.mouse.click(700, 180);
+        console.log("Клик по координатам: x=700, y=180");
+        await page.waitForTimeout(500);
 
-          // Если селекторы не сработали, кликаем по координатам в области красного круга
-          if (!photoClicked) {
-            console.log(
-              "Селекторы фотографии не сработали, кликаем по координатам в области фото"
-            );
+        // Третий клик - по другой области
+        await page.mouse.click(650, 200);
+        console.log("Клик по координатам: x=650, y=200");
+        await page.waitForTimeout(500);
 
-            // Получаем размеры окна
-            const dimensions = await page.evaluate(() => {
-              return {
-                width: window.innerWidth,
-                height: window.innerHeight,
-              };
-            });
-
-            // Координаты для клика по фото в верхней части модального окна
-            // Примерно по центру верхней части окна, где обычно расположено главное фото
-            const x = Math.floor(dimensions.width * 0.7); // Примерно 70% ширины (правая часть экрана)
-            const y = Math.floor(dimensions.height * 0.25); // Примерно 25% высоты (верхняя часть модального окна)
-
-            console.log(`Клик по координатам фотографии: x=${x}, y=${y}`);
-            await page.mouse.click(x, y);
-
-            // Дополнительный клик по центру модального окна, если первый не сработал
-            await page.waitForTimeout(1000);
-            const centerX = Math.floor(dimensions.width * 0.7);
-            const centerY = Math.floor(dimensions.height * 0.4);
-            console.log(
-              `Дополнительный клик по центру модального окна: x=${centerX}, y=${centerY}`
-            );
-            await page.mouse.click(centerX, centerY);
-
-            photoClicked = true;
-          }
-
-          // Ждем загрузки галереи
-          await page.waitForLoadState("networkidle");
-          await page.waitForTimeout(2000);
-        } catch (e) {
-          console.log(
-            `Ошибка при взаимодействии с фотографией в модальном окне: ${e.message}`
-          );
-        }
+        // Даем время для загрузки галереи
+        await page.waitForLoadState("networkidle");
+        await page.waitForTimeout(1000);
       }
     } catch (error) {
       console.error("Ошибка при обработке результатов поиска:", error);
       throw error;
     }
 
-    // Переход к разделу фотографий
+    // ШАГ 3: Переход к разделу фотографий
     try {
-      await page.waitForTimeout(2000);
       console.log("Ищем изображение для входа в галерею...");
+
+      // Минимальное время ожидания для загрузки элементов страницы
+      await page.waitForTimeout(500);
 
       // Сперва проверим, находимся ли мы уже в галерее
       const inGallery = await page.evaluate(() => {
         return (
-          document.querySelector('img[src*="googleusercontent.com/p/"]') !==
-          null
+          document.querySelector('a[data-photo-index="1"]') !== null ||
+          document.querySelector('[data-photo-index="1"]') !== null
         );
       });
 
       if (!inGallery) {
         console.log("Мы не в галерее, ищем способ открыть фотографии...");
+        console.log("Пробуем клик по фиксированным координатам...");
 
-        // Расширенный список селекторов для доступа к фотографиям
-        const photoEntrySelectors = [
-          // Главное изображение в карточке объекта
-          'button[data-index="0"]',
-          'button[jsaction*="pane.heroHeaderImage.click"]',
-          'img[src*="googleusercontent.com"]',
-          'div[style*="background-image"]',
-          'div[data-index="0"]',
-          // Контейнеры изображений
-          'div[role="img"]',
-          // Табы с фотографиями
-          'button[aria-label*="фотография"]',
-          // Обычно миниатюры внизу карточки
-          "a[data-photo-index]",
-          // Блок с основной фотографией вверху
-          'div[jsaction*="scale"]',
-          // Дополнительные селекторы для карточек мест
-          ".bJzME.Hu9e2e.tTVLSc", // Контейнер с фото
-          ".RZ66Rb", // Фото в новом дизайне
-          ".tEVN5b", // Контейнер с изображением
-          // Изображение по атрибутам
-          'img[alt*="фото"]',
-          'img[alt*="Фото"]',
-          // По классам
-          ".aoRNLd",
-          // Дополнительные селекторы кнопок
-          'button[jsaction*="openPhotos"]',
-          'button[jsaction*="preview"]',
-        ];
-
-        let imageClicked = false;
-
-        // Пробуем найти и нажать на элемент из списка селекторов
-        for (const selector of photoEntrySelectors) {
-          try {
-            const element = await page.$(selector);
-            if (element) {
-              console.log(`Найден элемент фотографии: ${selector}`);
-              await element.click();
-              console.log(`Кликнули по элементу: ${selector}`);
-              imageClicked = true;
-              await page.waitForTimeout(2000);
-              break;
-            }
-          } catch (e) {
-            // Продолжаем перебор селекторов
-          }
-        }
-
-        // Если селекторы не сработали, используем координаты
-        if (!imageClicked) {
-          console.log("Селекторы не сработали, пробуем клик по координатам");
-
-          const dimensions = await page.evaluate(() => {
-            return {
-              width: window.innerWidth,
-              height: window.innerHeight,
-            };
-          });
-
-          // Координаты для различных мест на странице, которые могут быть фотографиями
-          const clickCoordinates = [
-            // Верхняя часть экрана - обычно главное фото
-            {
-              x: Math.floor(dimensions.width * 0.7),
-              y: Math.floor(dimensions.height * 0.2),
-            },
-            // Центр модального окна
-            {
-              x: Math.floor(dimensions.width * 0.7),
-              y: Math.floor(dimensions.height * 0.4),
-            },
-            // Верхняя левая часть модального окна
-            {
-              x: Math.floor(dimensions.width * 0.6),
-              y: Math.floor(dimensions.height * 0.2),
-            },
-            // Фиксированные координаты на основе скриншота
-            { x: 700, y: 180 },
-            { x: 750, y: 200 },
-          ];
-
-          for (const coords of clickCoordinates) {
-            try {
-              console.log(`Клик по координатам: x=${coords.x}, y=${coords.y}`);
-              await page.mouse.click(coords.x, coords.y);
-              await page.waitForTimeout(2000);
-
-              // Проверяем, открылась ли галерея
-              const galleryOpened = await page.evaluate(() => {
-                return (
-                  document.querySelector(
-                    'img[src*="googleusercontent.com/p/"]'
-                  ) !== null
-                );
-              });
-
-              if (galleryOpened) {
-                console.log("Галерея открылась после клика по координатам");
-                imageClicked = true;
-                break;
-              }
-            } catch (e) {
-              console.log(`Ошибка при клике по координатам: ${e.message}`);
-            }
-          }
-        }
-
-        console.log(
-          imageClicked
-            ? "Успешно перешли в галерею изображений"
-            : "Не удалось перейти в галерею"
-        );
+        // Кликаем в предполагаемое место фотографии без долгих ожиданий
+        await page.mouse.click(700, 180);
+        await page.waitForTimeout(500);
       } else {
         console.log("Мы уже находимся в галерее изображений");
       }
 
-      // Сбор URL фотографий
+      // ШАГ 4: Сбор URL фотографий
       try {
-        // Проверяем, есть ли кнопка "Далее"
-        const hasNextButton = await page.evaluate(() => {
-          // Различные варианты текста кнопки следующего фото
-          const nextTexts = ["Далее", "Next", "Следующая", "Следующее", "→"];
-          const buttons = Array.from(document.querySelectorAll("button"));
+        console.log("Собираем URL фотографий из галереи...");
 
-          return buttons.some((btn) => {
-            const text = btn.textContent || btn.innerText || "";
-            const ariaLabel = btn.getAttribute("aria-label") || "";
-            return nextTexts.some(
-              (nextText) =>
-                text.includes(nextText) || ariaLabel.includes(nextText)
-            );
-          });
+        // Функция для извлечения URL изображений из тегов a с data-photo-index
+        // Сразу выполняем функцию без долгих ожиданий
+        const foundUrls = await page.evaluate(() => {
+          const photoLinks = document.querySelectorAll("a[data-photo-index]");
+          return Array.from(photoLinks).reduce((acc, link) => {
+            // Берем первый вложенный div вместо поиска по классу
+            const imageDiv =
+              link.querySelector('div[role="img"]') ||
+              link.querySelector("div");
+            if (imageDiv && imageDiv.style && imageDiv.style.backgroundImage) {
+              // Извлекаем URL из атрибута style background-image
+              let bgImage = imageDiv.style.backgroundImage;
+              // Удаляем url(" в начале и "); в конце
+              let url = bgImage
+                .replace(/^url\(['"]?/, "")
+                .replace(/['"]?\)$/, "");
+
+              // Удаляем кавычки, если они есть
+              url = url.replace(/^"(.*)"$/, "$1");
+              url = url.replace(/^'(.*)'$/, "$1");
+
+              // Проверяем, что это действительно URL изображения, а не заглушка "//0"
+              if (
+                url &&
+                url !== "//0" &&
+                url.includes("googleusercontent.com")
+              ) {
+                // Форматируем URL для получения изображения в высоком качестве
+                // Берем основную часть URL до параметров
+                const baseUrl = url.split("=")[0];
+                acc.push(baseUrl + "=w2000");
+              }
+            }
+            return acc;
+          }, []);
         });
 
-        if (hasNextButton) {
-          console.log("Кнопка 'Далее' найдена в галерее");
+        if (foundUrls.length > 0) {
+          console.log(`Найдено ${foundUrls.length} фотографий в галерее`);
+          foundUrls.forEach((url) => photoUrls.add(url));
         } else {
-          console.log("Кнопка 'Далее' не найдена, ищем по селекторам");
+          console.log("Не удалось найти фотографии в галерее");
         }
-
-        // Расширенный список селекторов для кнопки "Далее"
-        const nextButtonSelectors = [
-          'button[aria-label="Далее"]',
-          'button[aria-label="Next"]',
-          'button[aria-label="Следующая фотография"]',
-          'button[jsaction*="rightNavigationButtonPress"]',
-          "button.gTozgf",
-          "button.VfPpkd-Bz112c-LgbsSe",
-          "button.eU5Rrb.waIsr.AnCkCf",
-          // Дополнительные селекторы по стилям и атрибутам
-          'button[data-navigation-direction="forward"]',
-          'button:has(svg[xmlns="http://www.w3.org/2000/svg"])',
-        ];
-
-        // Функция для сбора URL изображений на странице
-        async function collectImageUrls() {
-          const urls = await page.evaluate(() => {
-            const images = document.querySelectorAll("img");
-            return Array.from(images).reduce((acc, img) => {
-              const src = img.src || "";
-              if (src && src.includes("googleusercontent.com/p/")) {
-                // Форматируем URL для получения изображения в высоком качестве
-                acc.push(src.split("=")[0] + "=w2000");
-              }
-              return acc;
-            }, []);
-          });
-
-          if (urls.length > 0) {
-            console.log(
-              `Найдено ${urls.length} фотографий на текущей странице`
-            );
-            return urls;
-          } else {
-            console.log("Не удалось найти фотографии на текущей странице");
-            return [];
-          }
-        }
-
-        // Собираем URL с текущей фотографии
-        const initialUrls = await collectImageUrls();
-        initialUrls.forEach((url) => photoUrls.add(url));
 
         console.log("Всего найдено уникальных фотографий:", photoUrls.size);
       } catch (error) {
-        console.error("Ошибка при переключении фотографий:", error);
+        console.error("Ошибка при сборе URL фотографий:", error);
       }
     } catch (error) {
       console.error("Ошибка при переходе к фотографиям:", error);

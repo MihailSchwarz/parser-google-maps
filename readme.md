@@ -34,6 +34,10 @@ http://localhost:39283/gm/?q=Tenerife
 ## Обновление скрипта
 
 ```
+cd ~/parser-google-maps && git pull && npm install
+
+#or
+
 cd ~/parser-google-maps && git pull && npm install && npx playwright install && npx playwright install-deps
 
 pm2 restart parser-google-maps
